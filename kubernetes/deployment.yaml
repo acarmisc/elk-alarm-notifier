@@ -18,7 +18,7 @@ spec:
       containers:
       - name: elk-alarm-notifier
         imagePullPolicy: Always
-        image: elk-alarm-notifier:latest
+        image: ghcr.io/acarmisc/elk-alarm-notifier:release
         env:
           - name: ELASTIC_HOST
             value: "https://somehost:9200"
