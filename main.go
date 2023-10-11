@@ -14,7 +14,6 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 
 	goteamsnotify "github.com/atc0005/go-teams-notify/v2"
-	"github.com/atc0005/go-teams-notify/v2/adaptivecard"
 	"github.com/atc0005/go-teams-notify/v2/messagecard"
 )
 
@@ -26,13 +25,15 @@ func getEnv(key, fallback string) string {
 }
 
 var (
-	host            = getEnv("ELASTIC_HOST", "https://localhost:9200")
-	username        = getEnv("ELASTIC_USERNAME", "elastic")
-	password        = getEnv("ELASTIC_PASSWORD", "s3cr3t")
-	index_name      = getEnv("ELASTIC_INDEX", "alerts")
-	timestamp_field = getEnv("ELASTIC_TIMESTAMP_FIELD", "@timestamp")
-	channel         = getEnv("NOTIFY_CHANNEL", "msteams")
-	webhook         = getEnv("NOTIFY_MSTEAMS_WEBHOOK", "http://unusable")
+	host             = getEnv("ELASTIC_HOST", "https://localhost:9200")
+	username         = getEnv("ELASTIC_USERNAME", "elastic")
+	password         = getEnv("ELASTIC_PASSWORD", "s3cr3t")
+	index_name       = getEnv("ELASTIC_INDEX", "alerts")
+	timestamp_field  = getEnv("ELASTIC_TIMESTAMP_FIELD", "@timestamp")
+	tags_field       = getEnv("ELASTIC_TAGS_FIELD", "tags")
+	event_type_field = getEnv("ELASTIC_EVENT_TYPE_FIELD", "event")
+	channel          = getEnv("NOTIFY_CHANNEL", "msteams")
+	webhook          = getEnv("NOTIFY_MSTEAMS_WEBHOOK", "http://unusable")
 
 	freq_var            = getEnv("ALERT_INTERVAL", "300") // in seconds
 	gte                 = fmt.Sprintf("now-%ss", freq_var)
@@ -86,37 +87,62 @@ func queryElastic(mstClient *goteamsnotify.TeamsClient, client *elasticsearch.Cl
 
 	for _, hit := range r["hits"].(map[string]interface{})["hits"].([]interface{}) {
 		doc := hit.(map[string]interface{})["_source"]
+		doc_map := doc.(map[string]interface{})
 		log.Printf(" → ID=%s, %s", hit.(map[string]interface{})["_id"], doc)
 
 		// TODO: configurable mapping of values
-		event := doc.(map[string]interface{})["event"]
-		timestamp := doc.(map[string]interface{})["@timestamp"]
+		event := doc.(map[string]interface{})[event_type_field]
+		timestamp := doc.(map[string]interface{})[timestamp_field]
 		rule_name := doc.(map[string]interface{})["ruleName"]
 		doc_count := doc.(map[string]interface{})["contextMatchingDocuments"]
-		tags := doc.(map[string]interface{})["tags"]
-
-		msgTitle := fmt.Sprintf("Kibana Alert: %s %s", rule_name, event)
-		msgText := fmt.Sprintf("On date %s %s events trigger rule %s", timestamp, doc_count, rule_name)
+		tags_value := doc.(map[string]interface{})[tags_field]
+		tags := strings.Split(fmt.Sprintf("%v", tags_value), ",")
 
 		event_icon := ""
+		event_color := ""
 
 		if event == "fired" {
 			event_icon = "☢️"
+			event_color = "#f54242"
 		} else if event == "recovered" {
 			event_icon = "✅"
+			event_color = "#42f59b"
 		} else {
 			event_icon = "ℹ️"
+			event_color = "#FFF"
 		}
 
 		msgCard := messagecard.NewMessageCard()
 		msgCard.Title = fmt.Sprintf("%s Kibana Alert %s: %s ", event_icon, event, rule_name)
-		msgCard.Text = fmt.Sprintf("On date **%s** %s events trigger rule **%s**. <br />Tags: %s", timestamp, doc_count, rule_name, tags)
-		msgCard.ThemeColor = "#FFF"
+		msgCard.Text = fmt.Sprintf("On date **%s** %s events trigger rule **%s**",
+			timestamp, doc_count, rule_name)
+		msgCard.ThemeColor = event_color
 
-		msg, _ := adaptivecard.NewSimpleMessage(msgText, msgTitle, true)
+		section := messagecard.NewSection()
+		section.ActivityTitle = "Details"
+
+		for k := range doc_map {
+			value := fmt.Sprintf("%s", doc_map[k])
+			if len(value) > 0 {
+				fact := messagecard.NewSectionFact()
+				fact.Name = k
+				fact.Value = value
+				section.Facts = append(section.Facts, *fact)
+			}
+		}
+		msgCard.AddSection(section)
+
+		// if tags create a section with them
+		if len(tags) > 0 {
+			section_tags := messagecard.NewSection()
+			tags_string := strings.Join(tags, "`,`")
+			section_tags.ActivityTitle = "Tags"
+			section_tags.Text = fmt.Sprintf("`%s`", tags_string)
+			msgCard.AddSection(section_tags)
+		}
 
 		if dryrun {
-			log.Printf("%+v", msg)
+			log.Printf("%+v", msgCard)
 		} else {
 			if err := mstClient.Send(webhook, msgCard); err != nil {
 				log.Printf("failed to send message: %v", err)

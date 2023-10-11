@@ -26,6 +26,8 @@ You can set `event` attribute in a statically way to distinguish between `fired`
 - `ELASTIC_PASSWORD`: Password for ElasticSearch
 - `ELASTIC_INDEX`: Index where Kibana alerts will be stored
 - `ELASTIC_TIMESTAMP_FIELD`: Range query using `gte` will be based on that field. Default to `@timestamp`
+- `ELASTIC_TAGS_FIELD`: Field to holds tags. Default to `tags`
+- `ELASTIC_EVENT_TYPE_FIELD`: Extra field used to manage `fired` vs `recovered` alarm status. Default to `event`.
 - `NOTIFY_CHANNEL`: Channel to be used to deliver notification. Only `msteams` for Microsoft Teams supported at the moment.
 - `NOTIFY_MSTEAMS_WEBHOOK`: Webhook to reach MS Teams Channel.
 - `ALERT_INTERVAL`: How often search for new events in seconds. Default to 300 seconds (5 mins)
@@ -36,5 +38,47 @@ You can set `event` attribute in a statically way to distinguish between `fired`
 This project is inteded to be executed on Kubernetes via a standard Deployment. To deploy the easy way is to apply a manifest like the following:
 
 ```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elk-alarm-notifier
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: elk-alarm-notifier
+  template:
+    metadata:
+      labels:
+        app: elk-alarm-notifier
+    spec:
+      containers:
+      - name: elk-alarm-notifier
+        imagePullPolicy: Always
+        image: ghcr.io/acarmisc/elk-alarm-notifier:release
+        env:
+          - name: ELASTIC_HOST
+            value: "https://somehost:9200"
+          - name: ELASTIC_USERNAME
+            value: "elastic"
+          - name: ELASTIC_PASSWORD
+            value: "s3cr3t"
+          - name: ELASTIC_INDEX
+            value: "alarms"          
+          - name: NOTIFY_MSTEAMS_WEBHOOK
+            value: "https://idoqsrl.webhook.office.com/webhookb2/someHash"          
+          - name: DRYRUN
+            value: "false"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: 100m
+            memory: 256Mi        
+
 
 ```
