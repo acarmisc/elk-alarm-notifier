@@ -26,6 +26,8 @@ You can set `event` attribute in a statically way to distinguish between `fired`
 - `ELASTIC_PASSWORD`: Password for ElasticSearch
 - `ELASTIC_INDEX`: Index where Kibana alerts will be stored
 - `ELASTIC_TIMESTAMP_FIELD`: Range query using `gte` will be based on that field. Default to `@timestamp`
+- `ELASTIC_TAGS_FIELD`: Field to holds tags. Default to `tags`
+- `ELASTIC_EVENT_TYPE_FIELD`: Extra field used to manage `fired` vs `recovered` alarm status. Default to `event`.
 - `NOTIFY_CHANNEL`: Channel to be used to deliver notification. Only `msteams` for Microsoft Teams supported at the moment.
 - `NOTIFY_MSTEAMS_WEBHOOK`: Webhook to reach MS Teams Channel.
 - `ALERT_INTERVAL`: How often search for new events in seconds. Default to 300 seconds (5 mins)
