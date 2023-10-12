@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v8"
-
 	goteamsnotify "github.com/atc0005/go-teams-notify/v2"
 	"github.com/atc0005/go-teams-notify/v2/messagecard"
+
+	elasticsearch7 "github.com/elastic/go-elasticsearch/v7"
 )
 
 func getEnv(key, fallback string) string {
@@ -25,6 +25,8 @@ func getEnv(key, fallback string) string {
 }
 
 var (
+	// TODO: handle multiple elastic versions
+	version          = getEnv("ELASTIC_VERSION", "v7")
 	host             = getEnv("ELASTIC_HOST", "https://localhost:9200")
 	username         = getEnv("ELASTIC_USERNAME", "elastic")
 	password         = getEnv("ELASTIC_PASSWORD", "s3cr3t")
@@ -43,7 +45,7 @@ var (
 	dryrun, err_dryrun = strconv.ParseBool(dryrun_var)
 )
 
-func queryElastic(mstClient *goteamsnotify.TeamsClient, client *elasticsearch.Client, elasticQuery string) {
+func queryElastic(mstClient *goteamsnotify.TeamsClient, client *elasticsearch7.Client, elasticQuery string) {
 
 	log.Printf("Query ElasticSearch on %s index each %s seconds", index_name, freq_var)
 
@@ -154,16 +156,12 @@ func queryElastic(mstClient *goteamsnotify.TeamsClient, client *elasticsearch.Cl
 
 }
 
-func main() {
-
-	// Initialize a new Microsoft Teams client.
-	mstClient := goteamsnotify.NewTeamsClient()
-
+func setupElastic() *elasticsearch7.Client {
 	transport := http.DefaultTransport
 	tlsClientConfig := &tls.Config{InsecureSkipVerify: true}
 	transport.(*http.Transport).TLSClientConfig = tlsClientConfig
 
-	cfg := elasticsearch.Config{
+	cfg := elasticsearch7.Config{
 		Addresses: []string{
 			host,
 		},
@@ -171,6 +169,17 @@ func main() {
 		Password:  password,
 		Transport: transport,
 	}
+	client, _ := elasticsearch7.NewClient(cfg)
+
+	return client
+}
+
+func main() {
+
+	// Initialize a new Microsoft Teams client.
+	mstClient := goteamsnotify.NewTeamsClient()
+
+	client := setupElastic()
 
 	elasticQuery := fmt.Sprintf(`
 	{
@@ -182,11 +191,6 @@ func main() {
 			}
 		}
 	}`, timestamp_field, gte)
-
-	client, err := elasticsearch.NewClient(cfg)
-	if err != nil {
-		log.Panic(err)
-	}
 
 	for true {
 		queryElastic(mstClient, client, elasticQuery)
